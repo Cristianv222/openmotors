@@ -1,18 +1,9 @@
-import express from 'express';
-import * as authController from '../controllers/authController.js';
-import { authenticateToken } from '../middlewares/authMiddleware.js';
+import { Router } from 'express';
+import { registrarNegocioYAdmin, loginUsuario } from '../controllers/authController';
 
-const router = express.Router();
+const router = Router();
 
-router.post('/register', authController.register);
-router.post('/login', authController.login);
-
-// Ejemplo de ruta protegida
-router.get('/perfil', authenticateToken, (req, res) => {
-  res.json({ 
-    message: 'Acceso autorizado', 
-    usuario: req.user 
-  });
-});
+router.post('/registro', registrarNegocioYAdmin);
+router.post('/login', loginUsuario);
 
 export default router;

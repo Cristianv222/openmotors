@@ -1,66 +1,103 @@
-import * as UserModel from '../models/userModel.js';
-import { validateRegister, validateLogin } from '../utils/validation.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { Negocio, Usuario } from '../models/index.js';
 
-export const register = async (req, res) => {
+const registrarNegocioYAdmin = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  
   try {
-    // Validar datos de entrada
-    validateRegister(req.body);
+    // Crear negocio
+    const negocio = await Negocio.create({
+      nombre: req.body.nombre_negocio,
+      direccion: req.body.direccion_negocio,
+      telefono: req.body.telefono_negocio,
+      ruc: req.body.ruc_negocio,
+      logo: req.body.logo_negocio
+    }, { transaction });
 
-    // Crear usuario
-    const userId = await UserModel.createUser(req.body);
+    // Crear usuario admin
+    const hashedPassword = await bcrypt.hash(req.body.password, 10);
+    const usuario = await Usuario.create({
+      nombre: req.body.nombre,
+      apellido: req.body.apellido,
+      email: req.body.email,
+      password: hashedPassword,
+      telefono: req.body.telefono,
+      negocio_id: negocio.id
+    }, { transaction });
 
-    res.status(201).json({ 
-      message: 'Usuario registrado exitosamente', 
-      userId 
+    // Asignar como administrador principal
+    await NegocioAdministradores.create({
+      negocio_id: negocio.id,
+      usuario_id: usuario.id,
+      es_principal: true
+    }, { transaction });
+
+    await transaction.commit();
+    
+    res.status(201).json({
+      mensaje: 'Negocio y administrador registrados exitosamente',
+      usuario: { id: usuario.id, email: usuario.email },
+      negocio: { id: negocio.id, nombre: negocio.nombre }
     });
+    
   } catch (error) {
+    await transaction.rollback();
     res.status(400).json({ error: error.message });
   }
 };
 
-export const login = async (req, res) => {
+const loginUsuario = async (req, res) => {
   try {
-    // Validar datos de inicio de sesión
-    validateLogin(req.body);
-
-    const { email, password, negocio_id } = req.body;
+    // Buscar negocio por RUC
+    const negocio = await Negocio.findOne({ 
+      where: { ruc: req.body.ruc_negocio } 
+    });
+    
+    if (!negocio) {
+      return res.status(404).json({ error: 'Negocio no encontrado' });
+    }
 
     // Buscar usuario
-    const user = await UserModel.findUserByEmail(email, negocio_id);
+    const usuario = await Usuario.findOne({
+      where: { email: req.body.email, negocio_id: negocio.id }
+    });
 
-    if (!user) {
+    if (!usuario) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
     // Verificar contraseña
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
+    const validPassword = await bcrypt.compare(req.body.password, usuario.password);
+    if (!validPassword) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
-    // Generar token
+    // Generar JWT
     const token = jwt.sign(
       { 
-        id: user.id, 
-        email: user.email,
-        negocio_id: user.negocio_id 
+        usuarioId: usuario.id, 
+        negocioId: negocio.id,
+        email: usuario.email 
       }, 
-      process.env.JWT_SECRET, 
-      { expiresIn: '1h' }
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
     );
 
     res.json({
+      mensaje: 'Login exitoso',
       token,
-      user: {
-        id: user.id,
-        nombre: user.nombre,
-        apellido: user.apellido,
-        email: user.email
+      usuario: {
+        id: usuario.id,
+        nombre: usuario.nombre,
+        email: usuario.email,
+        rol: 'admin' // Aquí deberías implementar la lógica de roles
       }
     });
+
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(500).json({ error: error.message });
   }
 };
+
+export { registrarNegocioYAdmin, loginUsuario };

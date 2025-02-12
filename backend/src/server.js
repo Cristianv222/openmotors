@@ -1,32 +1,32 @@
 import express from 'express';
-import cors from 'cors';
+import { sequelize, testConnection } from './config/database.js';
+import authRoutes from './routes/authRoutes.js';
 import dotenv from 'dotenv';
-import router from '../src/routes/authRoutes';
 
+// Configurar entorno
 dotenv.config();
 
+// Inicializar Express
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3001;
 
-// Middlewares
-app.use(cors());
+// Middlewares básicos
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Conectar a DB
+await testConnection();
 
 // Rutas
-app.use('/api/auth', router);
+app.use('/api/auth', authRoutes);
 
-// Manejo de rutas no encontradas
-app.use((req, res) => {
-  res.status(404).json({ error: 'Ruta no encontrada' });
-});
-
-// Manejo de errores
+// Manejador de errores global
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ error: 'Algo salió mal' });
+  res.status(500).json({ error: 'Error interno del servidor' });
 });
 
 // Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`Servidor corriendo en puerto ${PORT}`);
+  console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
